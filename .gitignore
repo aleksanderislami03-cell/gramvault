@@ -1,0 +1,42 @@
+# --- GramVault runtime data (never commit user library/data) ---
+library/
+data/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+chroma_data/
+chroma/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.env
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# --- Node / frontend (owned by Agent A5) ---
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+yarn-error.log*
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Obsidian export output is user data, not repo content ---
+*.obsidian-export/

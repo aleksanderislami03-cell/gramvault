@@ -1,0 +1,46 @@
+# GramVault docker-compose.
+#
+# NOTE ON OLLAMA: Ollama is intentionally NOT defined as a service here.
+# In typical local dev, Ollama runs directly on the host machine (installed
+# natively, listening on http://localhost:11434) rather than inside this
+# compose network. The backend container reaches it via
+# `host.docker.internal`, which Docker Desktop (Windows/Mac) maps to the
+# host automatically. On Linux you may need to add:
+#   extra_hosts:
+#     - "host.docker.internal:host-gateway"
+# If you'd rather run Ollama in a container too, uncomment the `ollama`
+# service below and change GRAMVAULT_OLLAMA__HOST to "http://ollama:11434".
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - GRAMVAULT_SERVER__HOST=0.0.0.0
+      - GRAMVAULT_SERVER__PORT=8000
+      # Point at the host's Ollama install by default.
+      - GRAMVAULT_OLLAMA__HOST=http://host.docker.internal:11434
+      - GRAMVAULT_PATHS__LIBRARY_DIR=/data/library
+      - GRAMVAULT_PATHS__DB_PATH=/data/gramvault.db
+      - GRAMVAULT_PATHS__CHROMA_DIR=/data/chroma
+    volumes:
+      - ./data:/data
+      # Mount an Obsidian vault here if exporting from inside the container:
+      # - /path/to/your/vault:/vault
+    extra_hosts:
+      # Needed on Linux hosts for host.docker.internal to resolve.
+      - "host.docker.internal:host-gateway"
+
+  # --- Optional: run Ollama in a container instead of on the host ---
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+
+# volumes:
+#   ollama_data:
