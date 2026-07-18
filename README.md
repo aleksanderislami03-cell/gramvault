@@ -4,6 +4,10 @@
 
 GramVault never talks to Instagram, never scrapes, and never phones home. It reads the official "Download Your Information" export you already have permission to download, builds a local library out of it (SQLite + ChromaDB), and lets you browse, search, and chat with your own saved content using a local LLM through [Ollama](https://ollama.com). Everything stays on your machine.
 
+![GramVault demo: importing an export ZIP, running AI enrichment, browsing the gallery, asking the chatbot a question (answered live by llama3.1:8b with a citation chip), and exporting to Obsidian](docs/demo.gif)
+
+*Live demo with the bundled sample fixture: import → AI enrichment → gallery → chat (real llama3.1:8b answer with a citation chip) → Obsidian export.*
+
 ---
 
 ## Contents
