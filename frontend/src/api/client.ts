@@ -200,21 +200,51 @@ export async function streamChatMessage(
   const handleFrame = (rawFrame: string) => {
     let eventName = 'message'
     const dataLines: string[] = []
-    for (const line of rawFrame.split('\n')) {
+    // SSE lines may end in \r\n (sse-starlette's default) or \n.
+    for (const line of rawFrame.split(/\r?\n/)) {
       if (!line || line.startsWith(':')) continue // blank/comment (keep-alive)
       if (line.startsWith('event:')) eventName = line.slice('event:'.length).trim()
       else if (line.startsWith('data:')) dataLines.push(line.slice('data:'.length).trim())
     }
     if (dataLines.length === 0) return
     const data = dataLines.join('\n')
-    if (eventName === 'token') {
-      const parsed = JSON.parse(data) as { content: string }
-      handlers.onToken?.(parsed.content)
-    } else if (eventName === 'done') {
-      handlers.onDone?.(JSON.parse(data) as ChatStreamDonePayload)
-    } else if (eventName === 'error') {
-      const parsed = JSON.parse(data) as { detail: string }
-      handlers.onError?.(parsed.detail)
+    try {
+      if (eventName === 'token') {
+        const parsed = JSON.parse(data) as { content: string }
+        handlers.onToken?.(parsed.content)
+      } else if (eventName === 'done') {
+        handlers.onDone?.(JSON.parse(data) as ChatStreamDonePayload)
+      } else if (eventName === 'error') {
+        const parsed = JSON.parse(data) as { detail: string }
+        handlers.onError?.(parsed.detail)
+      }
+    } catch {
+      // A malformed frame must not wedge the stream (and with it the
+      // "Sending…" UI state) — skip it and keep consuming.
+    }
+  }
+
+  // Frames are separated by a blank line: \r\n\r\n from sse-starlette
+  // (its default line separator is \r\n), or \n\n from other servers.
+  // NB: "\r\n\r\n" does NOT contain "\n\n", so both must be searched —
+  // matching only \n\n silently drops every frame of a \r\n stream.
+  const drainFrames = () => {
+    for (;;) {
+      const crlf = buffer.indexOf('\r\n\r\n')
+      const lf = buffer.indexOf('\n\n')
+      let index: number
+      let sepLength: number
+      if (crlf !== -1 && (lf === -1 || crlf < lf)) {
+        index = crlf
+        sepLength = 4
+      } else if (lf !== -1) {
+        index = lf
+        sepLength = 2
+      } else {
+        return
+      }
+      handleFrame(buffer.slice(0, index))
+      buffer = buffer.slice(index + sepLength)
     }
   }
 
@@ -222,13 +252,7 @@ export async function streamChatMessage(
     const { done, value } = await reader.read()
     if (done) break
     buffer += decoder.decode(value, { stream: true })
-
-    let sepIndex = buffer.indexOf('\n\n')
-    while (sepIndex !== -1) {
-      handleFrame(buffer.slice(0, sepIndex))
-      buffer = buffer.slice(sepIndex + 2)
-      sepIndex = buffer.indexOf('\n\n')
-    }
+    drainFrames()
   }
   if (buffer.trim()) handleFrame(buffer)
 }

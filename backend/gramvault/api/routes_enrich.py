@@ -51,23 +51,39 @@ async def run_enrichment(
 ) -> EnrichmentRunResponse:
     """Enqueue items for AI enrichment.
 
-    Checks Ollama readiness (server up + vision/embedding models pulled)
+    Checks Ollama readiness (server up + required models pulled)
     synchronously up front, so a misconfigured setup fails fast with a
     friendly 503 instead of silently failing in the background later.
-    Resolves the target item set (explicit `item_ids`, or all currently
-    `pending` items), flips them to `pending` (if explicitly requested —
-    so progress reflects "queued" immediately) and schedules
-    `gramvault.ai.pipeline.process_items` as a background task.
+    The vision model is only required when at least one target item
+    actually has media files — link-only libraries (metadata without
+    media bytes, common with Instagram saved-post exports) enrich with
+    just the embedding model, matching the pipeline's own per-item
+    `needs_vision` narrowing. Resolves the target item set (explicit
+    `item_ids`, or all currently `pending` items), flips them to
+    `pending` (if explicitly requested — so progress reflects "queued"
+    immediately) and schedules `gramvault.ai.pipeline.process_items` as
+    a background task.
     """
+    with session_scope(config) as conn:
+        item_ids = pipeline.resolve_target_item_ids(conn, body.item_ids)
+        needs_vision = False
+        if item_ids:
+            placeholders = ",".join("?" for _ in item_ids)
+            row = conn.execute(
+                f"SELECT COUNT(*) AS count FROM media_files WHERE item_id IN ({placeholders})",
+                item_ids,
+            ).fetchone()
+            needs_vision = row["count"] > 0
+
     try:
         await ollama_client.ensure_running(config)
-        await ollama_client.ensure_model_pulled(config.models.vision_model, config)
+        if needs_vision:
+            await ollama_client.ensure_model_pulled(config.models.vision_model, config)
         await ollama_client.ensure_model_pulled(config.models.embedding_model, config)
     except (ollama_client.OllamaNotRunningError, ollama_client.ModelNotPulledError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     with session_scope(config) as conn:
-        item_ids = pipeline.resolve_target_item_ids(conn, body.item_ids)
         if body.item_ids is not None:
             pipeline.mark_items_pending(conn, item_ids)
 

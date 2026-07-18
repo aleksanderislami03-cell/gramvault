@@ -19,6 +19,11 @@ export function Chat() {
   const [error, setError] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const hasAutoSelected = useRef(false)
+  // Set when handleSend creates a session inline: the setActiveId below
+  // would otherwise trigger the messages-fetch effect mid-stream, and the
+  // server's (still incomplete) list would clobber the optimistic user
+  // bubble + streaming draft.
+  const skipNextMessagesFetch = useRef(false)
 
   function loadSessions() {
     api
@@ -38,6 +43,10 @@ export function Chat() {
   useEffect(() => {
     if (activeId === null) {
       setMessages([])
+      return
+    }
+    if (skipNextMessagesFetch.current) {
+      skipNextMessagesFetch.current = false
       return
     }
     api
@@ -68,6 +77,7 @@ export function Chat() {
       const session = await api.post<ChatSession>('/api/chat/sessions', { title: null })
       setSessions((prev) => [session, ...prev])
       sessionId = session.id
+      skipNextMessagesFetch.current = true
       setActiveId(sessionId)
     }
     if (sessionId === null) return

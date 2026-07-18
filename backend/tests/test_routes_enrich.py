@@ -183,6 +183,58 @@ class TestRunEnrichment:
         assert response.status_code == 503
         mock_process.assert_not_awaited()
 
+    def test_link_only_items_skip_the_vision_model_check(
+        self, client: TestClient, tmp_config: Config
+    ) -> None:
+        # Items with no media files (link-only saved posts) enrich with just
+        # the embedding model — mirrors the pipeline's per-item needs_vision
+        # narrowing, so a metadata-only library works without llava pulled.
+        _seed_item(tmp_config)
+
+        with (
+            patch(
+                "gramvault.api.routes_enrich.ollama_client.ensure_running",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "gramvault.api.routes_enrich.ollama_client.ensure_model_pulled",
+                new_callable=AsyncMock,
+            ) as mock_pulled,
+            patch("gramvault.api.routes_enrich.pipeline.process_items", new_callable=AsyncMock),
+        ):
+            response = client.post("/api/enrich/run", json={})
+
+        assert response.status_code == 202
+        checked = {call.args[0] for call in mock_pulled.await_args_list}
+        assert checked == {"nomic-embed-text"}
+
+    def test_items_with_media_still_require_the_vision_model(
+        self, client: TestClient, tmp_config: Config
+    ) -> None:
+        item_id = _seed_item(tmp_config)
+        with session_scope(tmp_config) as conn:
+            conn.execute(
+                "INSERT INTO media_files (item_id, file_path, media_type) VALUES (?, ?, 'photo')",
+                (item_id, "media/ab/abc123.jpg"),
+            )
+
+        with (
+            patch(
+                "gramvault.api.routes_enrich.ollama_client.ensure_running",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "gramvault.api.routes_enrich.ollama_client.ensure_model_pulled",
+                new_callable=AsyncMock,
+            ) as mock_pulled,
+            patch("gramvault.api.routes_enrich.pipeline.process_items", new_callable=AsyncMock),
+        ):
+            response = client.post("/api/enrich/run", json={})
+
+        assert response.status_code == 202
+        checked = {call.args[0] for call in mock_pulled.await_args_list}
+        assert checked == {"llava:7b", "nomic-embed-text"}
+
 
 class TestEnrichmentProgress:
     def test_aggregates_counts_by_status(self, client: TestClient, tmp_config: Config) -> None:
