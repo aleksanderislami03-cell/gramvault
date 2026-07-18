@@ -23,13 +23,19 @@ GramVault never talks to Instagram, never scrapes, and never phones home. It rea
 
 ## Screenshots
 
-<!-- TODO: screenshot — Gallery view: grid of imported photos/videos/reels with type/author/date badges and filter controls -->
-<!-- TODO: screenshot — Item Detail view: a single saved item with its media, caption, AI-generated description/transcript, and tags -->
-<!-- TODO: screenshot — Chat view: a conversation with the AI assistant, showing streamed responses and inline [[item:<id>]] citation chips that link back to library items -->
-<!-- TODO: screenshot — Import view: drag-and-drop of an Instagram export ZIP with live progress and a friendly error state -->
-<!-- TODO: screenshot — Settings view: Obsidian vault folder picker/validator and model configuration -->
+*All screenshots use the bundled demo fixture (`tests/fixtures/sample_export.zip`) — no real user data.*
 
-*(Real screenshots aren't available in this build environment — replace the placeholders above with actual captures before publishing.)*
+**Gallery** — your saved items in a filterable grid (type, author, tags, date range) with semantic search:
+
+![Gallery view](docs/screenshots/gallery.png)
+
+**Chat** — ask questions about your library; answers stream in with citation chips linking back to items:
+
+![Chat view](docs/screenshots/chat.png)
+
+**Settings** — point GramVault at your Obsidian vault and export your whole library as Markdown notes:
+
+![Settings view](docs/screenshots/settings.png)
 
 ## Features
 
