@@ -58,17 +58,17 @@ if (-not $PythonCmd) {
 $pyVersionString = (& $PythonCmd @PythonArgs --version)
 Write-Ok "Found $pyVersionString ($PythonCmd $($PythonArgs -join ' '))"
 
-# --- check node (18+) ---
+# --- check node (20.19+, Vite 8 requirement) ---
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     Write-Fail "Node.js not found on PATH."
-    Write-Host "  Install Node 18+ from https://nodejs.org/ and re-run this script."
+    Write-Host "  Install Node 22 LTS from https://nodejs.org/ and re-run this script."
     Write-Host "  (Node is often installed at C:\Program Files\nodejs - make sure that folder is on PATH.)"
     exit 1
 }
 $nodeVersionRaw = (node --version).TrimStart("v")
 $nodeMajor = [int]($nodeVersionRaw.Split(".")[0])
-if ($nodeMajor -lt 18) {
-    Write-Fail "Node $(node --version) found, but GramVault needs Node 18+."
+if ($nodeMajor -lt 20) {
+    Write-Fail "Node $(node --version) found, but GramVault needs Node 20.19+ (22 LTS recommended)."
     exit 1
 }
 Write-Ok "Found Node $(node --version)"

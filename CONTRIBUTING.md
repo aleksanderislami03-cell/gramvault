@@ -4,7 +4,7 @@ Thanks for considering a contribution. GramVault is a small, local-first project
 
 ## Dev environment setup
 
-Same prerequisites as the [Quickstart](README.md#quickstart): Python 3.11+, Node 18+, ffmpeg on `PATH`, and Ollama installed locally.
+Same prerequisites as the [Quickstart](README.md#quickstart): Python 3.11+, Node 20.19+ (22 LTS recommended), ffmpeg on `PATH`, and Ollama installed locally.
 
 ```bash
 git clone https://github.com/<your-fork>/gramvault.git

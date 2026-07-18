@@ -50,7 +50,7 @@ GramVault never talks to Instagram, never scrapes, and never phones home. It rea
 ### Prerequisites
 
 - [Python 3.11+](https://www.python.org/downloads/)
-- [Node 18+](https://nodejs.org/)
+- [Node 20.19+ (22 LTS recommended)](https://nodejs.org/) — Vite 8 needs `util.styleText`, absent from Node 18
 - [ffmpeg](https://ffmpeg.org/download.html) on your `PATH`
 - [Ollama](https://ollama.com/download), installed and reachable at `http://localhost:11434`
 

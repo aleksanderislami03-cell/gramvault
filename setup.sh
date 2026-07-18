@@ -39,15 +39,15 @@ if [ -z "$PYTHON_BIN" ]; then
 fi
 ok "Found $("$PYTHON_BIN" --version 2>&1) ($PYTHON_BIN)"
 
-# --- check node (18+) ---
+# --- check node (20.19+, Vite 8 requirement) ---
 if ! command -v node >/dev/null 2>&1; then
   fail "Node.js not found on PATH."
-  echo "  Install Node 18+ from https://nodejs.org/ and re-run this script."
+  echo "  Install Node 22 LTS from https://nodejs.org/ and re-run this script."
   exit 1
 fi
 NODE_MAJOR="$(node -e 'console.log(process.versions.node.split(".")[0])')"
-if [ "$NODE_MAJOR" -lt 18 ]; then
-  fail "Node $(node --version) found, but GramVault needs Node 18+."
+if [ "$NODE_MAJOR" -lt 20 ]; then
+  fail "Node $(node --version) found, but GramVault needs Node 20.19+ (22 LTS recommended)."
   exit 1
 fi
 ok "Found Node $(node --version)"
