@@ -40,3 +40,6 @@ Thumbs.db
 
 # --- Obsidian export output is user data, not repo content ---
 *.obsidian-export/
+
+# --- Active local config (may contain personal paths like your Obsidian vault) ---
+config.yaml

@@ -89,6 +89,14 @@ if (Get-Command ollama -ErrorAction SilentlyContinue) {
     Write-Host "  Install it from https://ollama.com/download before running 'gramvault serve'."
 }
 
+# --- create local config from example (config.yaml is gitignored: it may hold personal paths) ---
+if (-not (Test-Path "config.yaml")) {
+    Copy-Item "config.example.yaml" "config.yaml"
+    Write-Ok "Created config.yaml from config.example.yaml."
+} else {
+    Write-Ok "config.yaml already exists - leaving it untouched."
+}
+
 # --- python venv + backend install ---
 Write-Info "Creating virtual environment (.venv)..."
 & $PythonCmd @PythonArgs -m venv .venv

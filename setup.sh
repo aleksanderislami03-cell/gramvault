@@ -68,6 +68,14 @@ else
   echo "  Install it from https://ollama.com/download before running 'gramvault serve'."
 fi
 
+# --- create local config from example (config.yaml is gitignored: it may hold personal paths) ---
+if [ ! -f config.yaml ]; then
+  cp config.example.yaml config.yaml
+  ok "Created config.yaml from config.example.yaml."
+else
+  ok "config.yaml already exists — leaving it untouched."
+fi
+
 # --- python venv + backend install ---
 info "Creating virtual environment (.venv)..."
 "$PYTHON_BIN" -m venv .venv
