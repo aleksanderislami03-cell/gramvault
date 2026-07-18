@@ -1,0 +1,42 @@
+name: Feature request
+description: Suggest an idea or improvement for GramVault
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas are tracked in [ROADMAP.md](../../blob/main/ROADMAP.md) — worth a skim to see if yours is already listed. GramVault deliberately keeps a tight scope: 100% local, no telemetry, no external services beyond localhost Ollama.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the situation where GramVault falls short for you.
+      placeholder: "When I have 5,000 saved items, the gallery gets slow because..."
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: What would you like to happen?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of GramVault?
+      options:
+        - Import
+        - Enrichment pipeline
+        - Gallery / item detail
+        - Chat / search
+        - Obsidian export
+        - Setup / packaging / CLI
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+      description: Optional — workarounds you're using today, or other approaches that might fit better.

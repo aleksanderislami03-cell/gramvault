@@ -1,0 +1,61 @@
+name: Bug report
+description: Something in GramVault isn't working the way it should
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! A few details make it much easier to reproduce and fix.
+
+        **Privacy reminder:** never attach your real Instagram export, database files, or media. If you need to share sample data, use (or adapt) the demo fixture at `tests/fixtures/sample_export.zip`.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: "I imported my export ZIP and clicked X, expected Y, but Z happened."
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. gramvault serve
+        2. Go to Import, upload ...
+        3. Click ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of GramVault?
+      options:
+        - Import (ZIP parsing / media organizing)
+        - Enrichment pipeline (captions / transcripts / embeddings)
+        - Gallery / item detail
+        - Chat / search
+        - Obsidian export
+        - Setup / packaging / CLI
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: "Windows 11 / macOS 15 / Ubuntu 24.04"
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Python, Node, and Ollama versions
+      placeholder: "Python 3.11.9, Node 22.12.0, Ollama 0.5.x"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Server console output, browser console errors, or the friendly error message you saw. Check for personal paths before pasting.
+      render: shell
