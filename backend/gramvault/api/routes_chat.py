@@ -1,19 +1,25 @@
-"""Chat (RAG) + semantic search API — STUB for Agent A4.
+"""Chat (RAG) + semantic search API — implemented by Agent A4.
 
 Owns: chat sessions/messages backed by SQLite, streaming assistant
 responses over Server-Sent Events, and a semantic search endpoint over
 the ChromaDB embeddings that Agent A3's enrichment pipeline writes.
 
-Every handler below is fully signed but raises HTTP 501.
+RAG orchestration (retrieval, prompt construction, streaming completion,
+citation persistence) lives in `gramvault.chat.service` — this module is
+just the HTTP surface + friendly error translation.
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sse_starlette.sse import EventSourceResponse
 
+from gramvault.ai.ollama_client import ModelNotPulledError, OllamaNotRunningError
 from gramvault.api.deps import get_config_dependency
+from gramvault.chat import service
 from gramvault.config import Config
+from gramvault.db.session import session_scope
 from gramvault.models.schemas import ChatMessage, ChatSession, Item
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -38,27 +44,29 @@ class SemanticSearchResponse(BaseModel):
     results: list[SemanticSearchResult]
 
 
+def _as_http_error(exc: OllamaNotRunningError | ModelNotPulledError) -> HTTPException:
+    """Translate an Ollama readiness failure into a clean 503 with an
+    actionable message, instead of letting it bubble up as a raw 500."""
+    return HTTPException(status_code=503, detail=str(exc))
+
+
 @router.post("/sessions", response_model=ChatSession, status_code=201)
 async def create_chat_session(
     body: ChatSessionCreateRequest,
     config: Config = Depends(get_config_dependency),
 ) -> ChatSession:
-    """Create a new chat session.
-
-    TODO(A4): insert into `chat_sessions` and return it.
-    """
-    raise HTTPException(status_code=501, detail="Not implemented — see Agent A4 (chat/search)")
+    """Create a new chat session."""
+    with session_scope(config) as conn:
+        return service.create_session(conn, title=body.title)
 
 
 @router.get("/sessions", response_model=list[ChatSession])
 async def list_chat_sessions(
     config: Config = Depends(get_config_dependency),
 ) -> list[ChatSession]:
-    """List chat sessions, most recently updated first.
-
-    TODO(A4): `SELECT * FROM chat_sessions ORDER BY updated_at DESC`.
-    """
-    raise HTTPException(status_code=501, detail="Not implemented — see Agent A4 (chat/search)")
+    """List chat sessions, most recently updated first."""
+    with session_scope(config) as conn:
+        return service.list_sessions(conn)
 
 
 @router.get("/sessions/{session_id}/messages", response_model=list[ChatMessage])
@@ -66,11 +74,11 @@ async def list_chat_messages(
     session_id: int,
     config: Config = Depends(get_config_dependency),
 ) -> list[ChatMessage]:
-    """List messages (with citations) in a session, oldest first.
-
-    TODO(A4): join `chat_messages` with `chat_citations`.
-    """
-    raise HTTPException(status_code=501, detail="Not implemented — see Agent A4 (chat/search)")
+    """List messages (with citations) in a session, oldest first."""
+    with session_scope(config) as conn:
+        if service.get_session(conn, session_id) is None:
+            raise HTTPException(status_code=404, detail=f"Chat session {session_id} not found")
+        return service.list_messages(conn, session_id)
 
 
 @router.post("/sessions/{session_id}/messages")
@@ -79,24 +87,37 @@ async def send_chat_message(
     body: ChatMessageCreateRequest,
     config: Config = Depends(get_config_dependency),
 ):
-    """Send a user message and stream back the assistant's RAG response.
+    """Send a user message and stream back the assistant's RAG response as
+    Server-Sent Events.
 
-    TODO(A4): implement as a Server-Sent Events stream using
-    `sse_starlette.sse.EventSourceResponse` (already a project dependency).
-    Expected behavior:
-      1. Persist the user message to `chat_messages`.
-      2. Retrieve relevant chunks from ChromaDB (embed `body.content` with
-         the configured `models.embedding_model` via Ollama) to ground
-         the response.
-      3. Stream the chat model's (`models.chat_model`) response token-by-
-         token as SSE `data:` events.
-      4. Persist the assistant message + `chat_citations` rows (pointing
-         at the `items`/`media_files` that grounded the answer) once the
-         stream completes.
-    No response_model is declared here since the real implementation
-    returns a streaming response rather than a JSON body.
+    Event stream shape (see `gramvault.chat.service.stream_message`):
+        event: token   data: {"content": "..."}          (0+ times)
+        event: done    data: {"message_id", "content", "citations": [...]}
+        event: error   data: {"detail": "..."}           (terminal, instead
+                                                            of "done", for a
+                                                            mid-stream Ollama
+                                                            failure)
+
+    Citations are inline `[[item:<item_id>]]` markers in the streamed
+    `content` — see `gramvault.chat.prompt` for the exact format contract
+    (frontend/A5 parses these into clickable chips).
+
+    404 if the session doesn't exist; 503 (before any streaming begins) if
+    Ollama isn't running or the required models aren't pulled.
     """
-    raise HTTPException(status_code=501, detail="Not implemented — see Agent A4 (chat/search)")
+    with session_scope(config) as conn:
+        if service.get_session(conn, session_id) is None:
+            raise HTTPException(status_code=404, detail=f"Chat session {session_id} not found")
+
+    # Checked eagerly (before opening the event stream) so a friendly 503
+    # is returned as a normal HTTP response rather than an SSE error event
+    # after the client has already committed to a streaming connection.
+    try:
+        await service.ensure_ollama_ready(config)
+    except (OllamaNotRunningError, ModelNotPulledError) as exc:
+        raise _as_http_error(exc) from exc
+
+    return EventSourceResponse(service.stream_message(session_id, body.content, config=config))
 
 
 @router.get("/search", response_model=SemanticSearchResponse)
@@ -107,10 +128,16 @@ async def semantic_search(
 ) -> SemanticSearchResponse:
     """Semantic search over the library (captions/transcripts/vision
     captions), independent of the chat flow — used for a "search bar"
-    style experience in the frontend.
-
-    TODO(A4): embed `q` with the configured embedding model, query
-    ChromaDB for the top `top_k` nearest chunks, resolve them back to
-    `Item`s, and return with similarity scores + a matching snippet.
+    style experience in the frontend. No LLM call — embedding + vector
+    search (merged with a keyword pass), same as chat retrieval but
+    without the chat completion step.
     """
-    raise HTTPException(status_code=501, detail="Not implemented — see Agent A4 (chat/search)")
+    try:
+        raw_results = await service.semantic_search(q, top_k=top_k, config=config)
+    except (OllamaNotRunningError, ModelNotPulledError) as exc:
+        raise _as_http_error(exc) from exc
+
+    return SemanticSearchResponse(
+        query=q,
+        results=[SemanticSearchResult(**r) for r in raw_results],
+    )

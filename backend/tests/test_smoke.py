@@ -53,12 +53,13 @@ def test_session_scope_context_manager(tmp_config: Config) -> None:
     assert row["username"] == "someone"
 
 
-def test_stub_routes_return_501(client: TestClient) -> None:
-    # A representative sample of stub endpoints across each feature area —
-    # proves the routers are mounted and signatures are valid, without
-    # needing real implementations yet.
-    assert client.get("/api/import/jobs").status_code == 501
-    assert client.get("/api/library/items").status_code == 501
-    assert client.get("/api/enrich/progress").status_code == 501
-    assert client.get("/api/chat/search", params={"q": "test"}).status_code == 501
-    assert client.post("/api/export/obsidian", json={}).status_code == 501
+def test_routers_are_mounted(client: TestClient) -> None:
+    # All five feature routers (A2 import/library, A3 enrich, A4 chat,
+    # A6 export) are now fully implemented — see their dedicated
+    # test_routes_*.py files for real behavior coverage. This just proves
+    # each router is mounted (i.e. none of these paths 404).
+    assert client.get("/api/import/jobs").status_code != 404
+    assert client.get("/api/library/items").status_code != 404
+    assert client.get("/api/enrich/progress").status_code != 404
+    assert client.get("/api/chat/search", params={"q": "test"}).status_code != 404
+    assert client.post("/api/export/obsidian", json={}).status_code != 404

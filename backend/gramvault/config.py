@@ -22,9 +22,10 @@ Usage:
 from __future__ import annotations
 
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -82,6 +83,20 @@ class ServerConfig(BaseModel):
     port: int = 8000
 
 
+class ExportConfig(BaseModel):
+    """Obsidian export behavior (Agent A6). Additive section — safe
+    defaults so existing config.yaml files without an `export:` block
+    keep working unchanged."""
+
+    # Subfolder created inside `paths.obsidian_vault_dir` when a request
+    # doesn't specify one explicitly.
+    default_vault_subfolder: str = "GramVault"
+    # "copy": copy media files into the vault subfolder and embed them
+    # with Obsidian `![[...]]` syntax. "link": leave media where it is
+    # and link out to the original path instead.
+    media_mode: Literal["copy", "link"] = "copy"
+
+
 class Config(BaseModel):
     paths: PathsConfig = Field(default_factory=PathsConfig)
     models: ModelsConfig = Field(default_factory=ModelsConfig)
@@ -89,6 +104,7 @@ class Config(BaseModel):
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     video: VideoConfig = Field(default_factory=VideoConfig)
     server: ServerConfig = Field(default_factory=ServerConfig)
+    export: ExportConfig = Field(default_factory=ExportConfig)
 
     # --- convenience resolved paths (absolute, based on cwd) ---
 
@@ -200,3 +216,63 @@ def reload_config() -> Config:
     a config file is edited at runtime."""
     get_config.cache_clear()
     return get_config()
+
+
+def get_config_path() -> Path:
+    """Resolve which config.yaml file writes should target — same discovery
+    rule as `load_config()`. Kept as a separate accessor (rather than
+    stashing this on `Config` itself) so `Config` stays a plain,
+    serializable data model with no filesystem provenance baked in, and so
+    it's overridable per-app the same way `get_config_dependency` is (see
+    `gramvault.api.deps.get_config_path_dependency`) — tests must never
+    resolve this to the real project's config.yaml."""
+    return _find_config_path() or (Path.cwd() / DEFAULT_CONFIG_FILENAME)
+
+
+def save_obsidian_vault_dir(vault_dir: str | None, config_path: Path) -> Config:
+    """Persist `paths.obsidian_vault_dir` to `config_path` and refresh the
+    cached singleton, so the value survives a server restart.
+
+    Rewrites just the `obsidian_vault_dir` line in place with a targeted
+    regex rather than a full YAML load/dump round-trip, because PyYAML's
+    dumper silently drops the file's comments (config.yaml is meant to stay
+    human-readable/hand-editable). Used by the Settings page's "Save vault
+    path" action, since the export endpoints only ever read from config,
+    never from a request body. Callers must pass an explicit `config_path`
+    (see `get_config_path`) rather than relying on discovery here, so tests
+    can point this at a tmp file instead of the real config.yaml.
+    """
+    # A hand-rolled double-quoted YAML scalar, not yaml.safe_dump(vault_dir)
+    # — PyYAML appends a spurious "...\n" document-end marker when dumping a
+    # bare top-level string, which corrupts the file once spliced inline.
+    value_literal = "null" if vault_dir is None else '"' + vault_dir.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    new_line = f"  obsidian_vault_dir: {value_literal}"
+
+    text = config_path.read_text(encoding="utf-8") if config_path.exists() else "paths:\n"
+
+    # Replacement strings built from a filesystem path (esp. on Windows,
+    # where "\U..."/"\1" etc. look like regex backreferences/escapes) must
+    # go through a callable, never a plain string, or re.sub tries to parse
+    # backslashes in the path as its own escape syntax.
+    pattern = re.compile(r"^  obsidian_vault_dir:.*$", re.MULTILINE)
+    if pattern.search(text):
+        text = pattern.sub(lambda _: new_line, text, count=1)
+    elif re.search(r"^paths:", text, re.MULTILINE):
+        text = re.sub(
+            r"^paths:$", lambda _: "paths:\n" + new_line, text, count=1, flags=re.MULTILINE
+        )
+    else:
+        text = text.rstrip("\n") + "\n\npaths:\n" + new_line + "\n"
+
+    config_path.write_text(text, encoding="utf-8")
+
+    # Clear the global singleton on a best-effort basis so a real running
+    # server picks up the change on its next get_config() call. Note this
+    # does NOT re-derive from config_path — get_config() re-runs its own
+    # discovery (_find_config_path()), which matches config_path exactly
+    # when this is called via the real dependency (get_config_path), but
+    # may diverge under a test's dependency override. The return value
+    # below is always correct regardless, since it loads config_path
+    # directly rather than relying on discovery.
+    get_config.cache_clear()
+    return load_config(config_path)

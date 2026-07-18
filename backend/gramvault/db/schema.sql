@@ -117,3 +117,26 @@ CREATE TABLE IF NOT EXISTS chat_citations (
 );
 
 CREATE INDEX IF NOT EXISTS idx_chat_citations_message_id ON chat_citations(message_id);
+
+-- Tracks a single "export to Obsidian vault" run (Agent A6), mirroring
+-- import_jobs. Kept as its own table (rather than adding a `kind` column
+-- to import_jobs) to avoid touching a table A2 is concurrently relying on.
+CREATE TABLE IF NOT EXISTS export_jobs (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    vault_subfolder     TEXT,
+    status              TEXT NOT NULL DEFAULT 'pending'
+                         CHECK (status IN ('pending', 'running', 'done', 'failed')),
+    total_items         INTEGER NOT NULL DEFAULT 0,
+    processed_items     INTEGER NOT NULL DEFAULT 0,
+    failed_items        INTEGER NOT NULL DEFAULT 0,
+    notes_written       INTEGER NOT NULL DEFAULT 0,
+    notes_updated       INTEGER NOT NULL DEFAULT 0,
+    media_files_copied  INTEGER NOT NULL DEFAULT 0,
+    skipped_json        TEXT, -- JSON list of {"item_id": ..., "reason": ...}
+    error_message       TEXT,
+    started_at          TEXT,
+    finished_at         TEXT,
+    created_at          TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_export_jobs_created_at ON export_jobs(created_at);

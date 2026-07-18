@@ -13,6 +13,8 @@ import typer
 
 from gramvault.config import get_config
 from gramvault.db.session import get_connection, init_db
+from gramvault.ingestion import import_zip
+from gramvault.models.schemas import JobStatus
 
 app = typer.Typer(
     name="gramvault",
@@ -45,14 +47,26 @@ def import_export(
 ) -> None:
     """Import an Instagram data export from the command line.
 
-    TODO(A2): this should call the same ingestion logic used by
-    `POST /api/import/upload` (backend/gramvault/api/routes_import.py) so
-    there's a single implementation shared between the API and the CLI —
-    consider factoring the actual import logic into a plain function/module
-    (e.g. `gramvault.ingestion.import_zip(path, config)`) that both call.
+    Calls the same `gramvault.ingestion.import_zip` used by
+    `POST /api/import/upload` (backend/gramvault/api/routes_import.py), so
+    there's a single implementation shared between the API and the CLI.
     """
-    typer.echo(f"Not implemented yet — see Agent A2 (ingestion). Would import: {zip_path}")
-    raise typer.Exit(code=1)
+    config = get_config()
+    if not zip_path.exists():
+        typer.echo(f"No such file: {zip_path}")
+        raise typer.Exit(code=1)
+
+    job = import_zip(zip_path, config)
+
+    if job.status == JobStatus.FAILED:
+        typer.echo(f"Import failed: {job.error_message}")
+        raise typer.Exit(code=1)
+
+    typer.echo(
+        f"Import job #{job.id} {job.status.value}: "
+        f"{job.processed_items}/{job.total_items} items processed "
+        f"({job.failed_items} failed)."
+    )
 
 
 @app.command(name="init-db")

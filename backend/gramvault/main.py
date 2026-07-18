@@ -13,8 +13,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from gramvault.api import routes_chat, routes_enrich, routes_export, routes_import, routes_library
@@ -71,7 +72,7 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     app.state.config = config
 
-    # --- feature routers (all currently stubs — see api/routes_*.py) ---
+    # --- feature routers ---
     app.include_router(routes_import.router)
     app.include_router(routes_library.router)
     app.include_router(routes_enrich.router)
@@ -82,16 +83,38 @@ def create_app(config: Config | None = None) -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    # --- serve imported media (photos/videos/keyframes) referenced by
+    # MediaFile.file_path, which the frontend resolves via mediaUrl() as
+    # "/media/<file_path>". Created on first request if the library hasn't
+    # been imported into yet, so this mount never fails at startup.
+    library_dir = config.resolved_library_dir
+    library_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/media", StaticFiles(directory=str(library_dir)), name="media")
+
     # --- serve the built frontend in production, if present ---
-    # TODO(A5): this expects a Vite production build at frontend/dist/
-    # with an index.html entrypoint. Until A5 builds the real frontend,
-    # this directory won't exist and the mount is skipped (API-only mode).
+    # Expects a Vite production build at frontend/dist/ with an index.html
+    # entrypoint. If absent (frontend not built yet), the app runs API-only.
+    #
+    # A plain `StaticFiles(html=True)` mount can't serve client-side routes
+    # like /chat or /items/42 on direct navigation/refresh — it 404s because
+    # no such file exists on disk. So hashed build assets are served as
+    # static files, and every other non-API/non-media path falls back to
+    # index.html, letting react-router handle routing client-side.
     if _FRONTEND_DIST_DIR.is_dir():
-        app.mount(
-            "/",
-            StaticFiles(directory=str(_FRONTEND_DIST_DIR), html=True),
-            name="frontend",
-        )
+        assets_dir = _FRONTEND_DIST_DIR / "assets"
+        if assets_dir.is_dir():
+            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="frontend-assets")
+
+        index_path = _FRONTEND_DIST_DIR / "index.html"
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def spa_fallback(full_path: str) -> FileResponse:
+            if full_path.startswith(("api/", "media/")):
+                raise HTTPException(status_code=404, detail="Not Found")
+            candidate = _FRONTEND_DIST_DIR / full_path
+            if full_path and candidate.is_file():
+                return FileResponse(candidate)
+            return FileResponse(index_path)
 
     return app
 
